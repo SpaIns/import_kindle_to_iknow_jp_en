@@ -1,0 +1,6 @@
+{
+    "cookies": "str of cookies",
+    "csrf-token": "string token",
+    "kindle_data": "path to kindle data as json",
+    "vocab_db": "path to kindles vocab.db file. this and kindle_data should be mutually exclusive. don't fill out if we already have json"
+}
