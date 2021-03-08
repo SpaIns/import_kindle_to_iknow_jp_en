@@ -23,3 +23,11 @@ The JSON file created also stores how many courses we've created for a book, and
 
 
 Note that all the requests made are reverse-engineered; iKnow doesn't have a public API, so if endpoints change, this script can break without warning.
+
+# How to Use
+
+Fill out the "generation_info.json" file as explained above.
+
+Run "python import_to_iknow.py"
+
+Wait a few minutes and then check out your iKnow account to see your new courses!
