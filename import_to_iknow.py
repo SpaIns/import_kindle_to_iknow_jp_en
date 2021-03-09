@@ -197,7 +197,7 @@ def create_results_json():
     results['not-added'] = failed_to_add
     results['no-sample'] = failed_to_add_sample
     with open('prior_results.json', 'w+', encoding='utf-8') as j:
-        j.write(json.dumps(results, indent=4))
+        j.write(json.dumps(results, indent=4, ensure_ascii=False))
     # This should be the final call of this script.
     exit(0)
 
