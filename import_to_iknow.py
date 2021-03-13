@@ -231,13 +231,15 @@ utf8=%E2%9C%93&sentence_package%5Bsentence%5D%5Btext%5D=
     '''
     encoded_sample = urllib.parse.quote_plus(word['sample'], encoding='utf-8')
     encoded_trans = urllib.parse.quote_plus(trans, encoding='utf-8')
+    definition = urllib.parse.quote_plus(word['definition'], encoding='utf-8')
     add_sentence_url = 'https://iknow.jp/custom/courses/{course_id}/items/{word_id}/sentences'.format(course_id=course_id, word_id=word_id)
 
     sample_text = 'utf8=%E2%9C%93&sentence_package%5Bsentence%5D%5Btext%5D=' + encoded_sample
     sample_translit = '&sentence_package%5Bsentence%5D%5Btransliteration%5D=' + encoded_trans
-    end = '&sentence_package%5Bsentence%5D%5Blanguage%5D=ja&sentence_package%5Btranslation%5D%5Btext%5D=&sentence_package%5Btranslation%5D%5Blanguage%5D=en&sentence_package%5Bsound%5D%5Burl%5D=&sentence_package%5Bimage_url%5D=&commit=Add'
+    translation = '&sentence_package%5Bsentence%5D%5Blanguage%5D=ja&sentence_package%5Btranslation%5D%5Btext%5D=' + definition
+    end = '&sentence_package%5Btranslation%5D%5Blanguage%5D=en&sentence_package%5Bsound%5D%5Burl%5D=&sentence_package%5Bimage_url%5D=&commit=Add'
 
-    sample_send_payload = sample_text + sample_translit + end
+    sample_send_payload = sample_text + sample_translit + translation + end
 
     try:
         res = requests.post(add_sentence_url, data=sample_send_payload, headers=headers)
