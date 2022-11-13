@@ -4,10 +4,23 @@ import urllib # For encoding strings to url strings
 import pykakasi # For transliterating kanji->kana
 import brotlicffi # For decompressing responses
 from jp_kindle_lookup_to_json.kindle_to_json import create_json_from_db
-import sys, re, signal
+import re, signal, csv
 
 # Initialize kakasi
 kks = pykakasi.kakasi()
+
+import argparse
+
+def init_argparse() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        usage="%(prog)s [OPTION] [FILE]...",
+        description="Print or check SHA1 (160-bit) checksums."
+    )
+    parser.add_argument("kindle_data", type=str, help="Kindle data path", default=None)
+    parser.add_argument("db_file", type=str, help="Path to vocab.db file", default=None)
+    parser.add_argument("csv_file", type=str, help="Path to csv file", default=None)
+    parser.add_argument("create_csv", action="store_true", help="Determine if we should create an anki-import csv", default=False)
+    return parser
 
 # Setup the parts of speech that iKnow recognizes
 valid_parts_of_speech = set({
@@ -66,7 +79,7 @@ course_info = [] # contains dicts mapping {"title", "cur_course_id", "number", "
 # Used for when we decide to overwrite what ctrl+c does
 original_sigint = signal.getsignal(signal.SIGINT)
 
-def convert_json_to_items(cookie_string: str, csrf_token: str, import_json: str):
+def load_prior_results_json() -> dict:
     # Try to open the prior results JSON file & add the already-added words to our
     # previously_added set to ensure we don't add the same words multiple times
     existing_courses = {} # Map of title to info as a tuple. cur id, cur #, cur items
@@ -87,13 +100,10 @@ def convert_json_to_items(cookie_string: str, csrf_token: str, import_json: str)
             # If you care about the data there, save it before re-running!
     except FileNotFoundError:
         print('No prior results JSON found. Skipping.')
-    
-    # Setup a handler for ctrl+c such that we always generate the results json at this point
-    # TODO: this doesn't actually seem to work as intended
-    signal.signal(signal.SIGINT, create_results_json)
+    return existing_courses
 
-    # Define our headers that we'll re-use for most requests
-    headers = {
+def create_headers_obj(cookie_string: str, csrf_token: str) -> dict:
+    return {
         'Host': 'iknow.jp',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:86.0) Gecko/20100101 Firefox/86.0',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
@@ -112,12 +122,22 @@ def convert_json_to_items(cookie_string: str, csrf_token: str, import_json: str)
         'TE': 'Trailers',
     }
 
+def convert_json_to_items(cookie_string: str, csrf_token: str, import_json: str):
+    existing_courses = load_prior_results_json()
+    # Define our headers that we'll re-use for most requests
+    headers = create_headers_obj(cookie_string, csrf_token)
+    
+    # Setup a handler for ctrl+c such that we always generate the results json at this point
+    # TODO: this doesn't actually seem to work as intended
+    signal.signal(signal.SIGINT, create_results_json)
+
+
     with open(import_json, 'r', encoding='utf-8') as f:
         json_data = json.load(f)
         for cur_book in json_data.get('books', []):
             cur_title = cur_book['title']
             # Grab info from JSON if exists, otherwise default to initialized values
-            course_id, cur_course_counts, cur_item_count = existing_courses.get(title, ('', 0, 0))
+            course_id, cur_course_counts, cur_item_count = existing_courses.get(cur_title, ('', 0, 0))
             if course_id == '':
                 # Need to make a new course and get the id for it.
                 course_id = create_new_course(cur_title, cur_course_counts, headers)
@@ -160,12 +180,12 @@ def convert_json_to_items(cookie_string: str, csrf_token: str, import_json: str)
                     # Couldn't create the item - move on to the next
                     continue
                 cur_item_count += 1
-                # In preperation for sending sample sentence, create the kana-only version of the sample
+                # In preparation for sending sample sentence, create the kana-only version of the sample
                 trans = create_transliteration(word)
                 # Only add sample sentence if we managed to transliterate something
                 if trans == '':
                     no_sample_dict = {
-                        'course': course,
+                        'course': cur_course,
                         'course_id': course_id,
                         'word': word['word'],
                         'word_id': word_id,
@@ -308,10 +328,12 @@ def create_new_item(course: str, course_id: str, word: dict, headers: dict) -> s
     pos = 'NONE' # Default to none
     # TODO: This chunk doesn't seem to work - part of speech wasn't added for any of my uploads
     for pos in pos_list:
-        if pos.lower() in valid_parts_of_speech:
+        if pos.lower().lstrip().rstrip() in valid_parts_of_speech:
             pos = pos_map.get(pos)
             # Quit on first match
             break
+        elif pos.lstrip().rstrip() != '':
+            print('Invalid PoS found:', pos)
     # implied else is either no PoS given, or can't map to anything. Keep as NONE
     '''
     This is the form iKnow sends:
@@ -341,7 +363,7 @@ item%5Bcue%5D%5Btext%5D=鼻歌&item%5Bcue%5D%5Blanguage%5D=jp&item%5Bcue%5D%5Btr
         failed_to_add.append(fail_to_add_dict)
         print('Failed to post new word ' + word['word'])
         return ''
-    # Handler for wierd bug I encountered where res came back as None- maybe just due to forced exit
+    # Handler for weird bug I encountered where res came back as None- maybe just due to forced exit
     if not res:
         fail_to_add_dict = {
             'course': course,
@@ -408,7 +430,68 @@ def create_new_course(title: str, count: int,  headers: dict) -> str:
         course_id = str(match[1])
         return course_id
 
+def create_word_csv_line(word: str) -> str:
+    # TODO: Another place to ignore?
+    # if word['word'] in previously_added or word['word'] in added:
+    #     return ''
+    if word['definition'] == BAD_DEF or word['reading'] == BAD_READING:
+        # The kindle json couldn't figure these out, let's not add them and move on.
+        print('Either bad reading or def for: ' + word['word'])
+        fail_to_add_dict = {
+            'course': 'csv_anki',
+            'course_id': -1,
+            'word': word['word']
+        }
+        failed_to_add.append(fail_to_add_dict)
+        return ''
+    cur_word = word['word']
+    # Don't try to add words we've added in the past
+    reading = word['reading']
+    definition = word['definition']
+    sample = word['sample']
+    if sample:
+        # Bold and underline the word in our sample sentence
+        if cur_word in sample:
+            sample = sample.replace(cur_word, '<b><u>' + cur_word + '</u></b>')
+        else:
+            print('Couldn\'t find ', cur_word, 'in the sample sentence.')
+    else:
+        # Use the word as the "sample sentence"
+        sample = '<b><u>' + cur_word + '</b></u>'
+    return [sample, definition, reading]
 
+'''
+Use this to create an Anki-importable CSV file for
+specifically Kanji practice, utilizing the created json file
+
+The Anki notes has the following fields:
+Expression (sample sentence)
+Meaning (definition)
+Reading (furigana)
+'''
+def create_anki_csv_file(import_json: str):
+    existing_items = load_prior_results_json()
+    lines = []
+    with open(import_json, 'r', encoding='utf-8') as f:
+        json_data = json.load(f)
+        for cur_book in json_data.get('books', []):
+            book_words = cur_book['words']
+            for word in book_words:
+                # TODO: I'm planning on using this for just Kanji - so do I care?
+                # if word in previously_added:
+                #     print('Previously seen')
+                new_word_line = create_word_csv_line(word)
+                # Ignore our blank/null strings
+                if new_word_line:
+                    added.add(word['word'])
+                    lines.append(new_word_line)
+    with open('anki_csv.csv', 'w+', newline='') as f:
+        writer = csv.writer(f, delimiter='|')
+        for line in lines:
+            writer.writerow(line)
+    create_results_json()
+    # Done
+                
 if __name__ == "__main__":
     print('Running')
     '''
@@ -418,6 +501,18 @@ if __name__ == "__main__":
     arg: csrf token
         firefox: same deal, but take the csrf token
     '''
+    parser = init_argparse()
+    args = parser.parse_args()
+    kindle_data = args.kindle_data
+    db_file = args.db_file
+    create_csv = args.create_csv
+    csv_file = args.csv_file
+    
+    if create_csv:
+        print('Building anki-import CSV from provided json')
+        create_anki_csv_file(csv_file)
+        exit(1)
+
     cookies = ''
     csrf_token = ''
     kindle_data = ''
