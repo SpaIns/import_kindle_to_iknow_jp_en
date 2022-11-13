@@ -31,3 +31,6 @@ Fill out the "generation_info.json" file as explained above.
 Run "python import_to_iknow.py"
 
 Wait a few minutes and then check out your iKnow account to see your new courses!
+
+
+brew install python-tk
