@@ -450,14 +450,22 @@ def create_word_csv_line(word: str) -> str:
     definition = word['definition']
     sample = word['sample']
     if sample:
-        # Bold and underline the word in our sample sentence
+        # Bold and mark with the correct font the word in our sample sentence
         if cur_word in sample:
-            sample = sample.replace(cur_word, '<b><u>' + cur_word + '</u></b>')
+            sample = sample.replace(cur_word, '<b><div class=kanji>' + cur_word + '</div></b>')
         else:
-            print('Couldn\'t find ', cur_word, 'in the sample sentence.')
+            # it might be a な　or する at the end of cur word, try to pull it off
+            no_na = cur_word.split('な')[0]
+            no_suru = cur_word.split('する')[0]
+            if no_na in sample:
+                sample = sample.replace(no_na, '<b><div class=kanji>' + no_na + '</div></b>')
+            elif no_suru in sample:
+                sample = sample.replace(no_suru, '<b><div class=kanji>' + no_suru + '</div></b>')
+            else:
+                print('Couldn\'t find ', cur_word, 'in the sample sentence.')
     else:
         # Use the word as the "sample sentence"
-        sample = '<b><u>' + cur_word + '</b></u>'
+        sample = '<b><div class=kanji>' + cur_word + '</b></div>'
     return [sample, definition, reading]
 
 '''
