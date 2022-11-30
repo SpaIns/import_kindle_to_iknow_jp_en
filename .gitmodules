@@ -1,3 +1,4 @@
 [submodule "jp_kindle_lookup_to_json"]
 	path = jp_kindle_lookup_to_json
 	url = https://github.com/SpaIns/jp_kindle_lookup_to_json.git
+	branch = main

@@ -9,6 +9,47 @@ import re, signal, csv
 # Initialize kakasi
 kks = pykakasi.kakasi()
 
+'''
+Helper functions for parsing out Kanji/Hirigana/Katakana from words/sentences
+See: https://stackoverflow.com/questions/33338713/filtering-out-all-non-kanji-characters-in-a-text-with-python-3
+'''
+## UNICODE BLOCKS ##
+
+# Regular expression unicode blocks collected from 
+# http://www.localizingjapan.com/blog/2012/01/20/regular-expressions-for-japanese-text/
+
+hiragana_full = r'[ぁ-ゟ]'
+katakana_full = r'[゠-ヿ]'
+kanji = r'[㐀-䶵一-鿋豈-頻]'
+radicals = r'[⺀-⿕]'
+katakana_half_width = r'[｟-ﾟ]'
+alphanum_full = r'[！-～]'
+symbols_punct = r'[、-〿]'
+misc_symbols = r'[ㇰ-ㇿ㈠-㉃㊀-㋾㌀-㍿]'
+ascii_char = r'[ -~]'
+
+## FUNCTIONS ##
+
+def extract_unicode_block(unicode_block, string):
+    ''' extracts and returns all texts from a unicode block from string argument.
+        Note that you must use the unicode blocks defined above, or patterns of similar form '''
+    return re.findall( unicode_block, string)
+
+def remove_unicode_block(unicode_block, string):
+    ''' removes all chaacters from a unicode block and returns all remaining texts from string argument.
+        Note that you must use the unicode blocks defined above, or patterns of similar form '''
+    return re.sub( unicode_block, '', string)
+
+## EXAMPLES ## 
+
+# text = '初めての駅 自由が丘の駅で、大井町線から降りると、ママは、トットちゃんの手を引っ張って、改札口を出ようとした。ぁゟ゠ヿ㐀䶵一鿋豈頻⺀⿕｟ﾟabc！～、〿ㇰㇿ㈠㉃㊀㋾㌀㍿'
+
+# print('Original text string:', text, '\n')
+# print('All kanji removed:', remove_unicode_block(kanji, text))
+# print('All hiragana in text:', ''.join(extract_unicode_block(hiragana_full, text)))
+
+# End of helper parsing functions
+
 import argparse
 
 def init_argparse() -> argparse.ArgumentParser:
@@ -454,15 +495,12 @@ def create_word_csv_line(word: str) -> str:
         if cur_word in sample:
             sample = sample.replace(cur_word, '<b><div class=kanji>' + cur_word + '</div></b>')
         else:
-            # it might be a な　or する at the end of cur word, try to pull it off
-            no_na = cur_word.split('な')[0]
-            no_suru = cur_word.split('する')[0]
-            if no_na in sample:
-                sample = sample.replace(no_na, '<b><div class=kanji>' + no_na + '</div></b>')
-            elif no_suru in sample:
-                sample = sample.replace(no_suru, '<b><div class=kanji>' + no_suru + '</div></b>')
+            only_kanji = ''.join(extract_unicode_block(kanji, cur_word)
+            if only_kanji:
+                sample = sample.replace(only_kanji, '<b><div class=kanji>' + only_kanji + '</div></b>')
             else:
                 print('Couldn\'t find ', cur_word, 'in the sample sentence.')
+                print('Only kanji for cur_word returned', only_kanji)
     else:
         # Use the word as the "sample sentence"
         sample = '<b><div class=kanji>' + cur_word + '</b></div>'
